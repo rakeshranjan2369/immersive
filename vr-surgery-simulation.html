@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Patient Body VR Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #medicalReport {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 300px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            color: white;
+            z-index: 100;
+            display: none;
+            max-height: 70%;
+            overflow-y: auto;
+        }
+        #vitalSigns {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            z-index: 100;
+        }
+        .vital {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .vital-value {
+            margin-left: 15px;
+            font-weight: bold;
+        }
+        h2, h3 {
+            margin-top: 0;
+            color: #0af;
+        }
+        .normal {
+            color: #0f0;
+        }
+        .warning {
+            color: #ff0;
+        }
+        .critical {
+            color: #f00;
+        }
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: none;
+            z-index: 101;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>Interactive Patient Body - Medical VR Simulation</h1>
+        <p>Click on body parts to view detailed medical reports</p>
+        <p>Click and drag to rotate | Scroll to zoom</p>
+    </div>
+    
+    <div id="vitalSigns">
+        <h3>Patient Vitals</h3>
+        <div class="vital">
+            <span>Heart Rate:</span>
+            <span class="vital-value" id="heartRate">72 BPM</span>
+        </div>
+        <div class="vital">
+            <span>Blood Pressure:</span>
+            <span class="vital-value" id="bloodPressure">120/80 mmHg</span>
+        </div>
+        <div class="vital">
+            <span>O2 Saturation:</span>
+            <span class="vital-value" id="o2sat">98%</span>
+        </div>
+        <div class="vital">
+            <span>Temperature:</span>
+            <span class="vital-value" id="temp">98.6°F</span>
+        </div>
+        <div class="vital">
+            <span>Respiration:</span>
+            <span class="vital-value" id="respiration">14/min</span>
+        </div>
+    </div>
+    
+    <div id="medicalReport">
+        <h2 id="reportTitle">Body Part Report</h2>
+        <div id="reportContent"></div>
+    </div>
+    
+    <div id="tooltip"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Initialize the scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111122);
+        
+        // Create camera
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.5, 4);
+        
+        // Create renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Add lights
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(2, 5, 2);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        // Create the operating table
+        const tableGeometry = new THREE.BoxGeometry(2.5, 0.2, 6);
+        const tableMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+        const table = new THREE.Mesh(tableGeometry, tableMaterial);
+        table.position.y = -0.5;
+        table.receiveShadow = true;
+        scene.add(table);
+        
+        // Create medical report data for each body part
+        const medicalReports = {
+            head: {
+                title: "Head & Brain",
+                content: `
+                    <h3>MRI Brain Scan Report</h3>
+                    <p><strong>Date:</strong> February 25, 2025</p>
+                    <p><strong>Findings:</strong> No abnormalities detected in cerebral hemispheres. Ventricles are of normal size and configuration. No evidence of mass effect or midline shift. No acute intracranial hemorrhage. Brain stem and cerebellum appear normal.</p>
+                    <p><strong>Diagnosis:</strong> <span class="normal">Normal brain anatomy.</span></p>
+                    
+                    <h3>Cranial Nerve Assessment</h3>
+                    <p>All cranial nerves (I-XII) intact and functioning normally.</p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>Mild concussion (2023) - fully recovered</p>
+                    <p>Occasional migraines - well controlled with medication</p>
+                `
+            },
+            chest: {
+                title: "Chest & Lungs",
+                content: `
+                    <h3>Chest X-Ray Report</h3>
+                    <p><strong>Date:</strong> February 27, 2025</p>
+                    <p><strong>Findings:</strong> Lung fields are clear bilaterally. No evidence of pulmonary edema, infiltrates, or nodules. Heart size is within normal limits. No pleural effusion or pneumothorax. The diaphragm contours are normal.</p>
+                    <p><strong>Diagnosis:</strong> <span class="warning">Mild hilar enlargement</span> - recommend follow-up in 3 months.</p>
+                    
+                    <h3>Pulmonary Function Test</h3>
+                    <p>FEV1: 95% of predicted value</p>
+                    <p>FVC: 98% of predicted value</p>
+                    <p>FEV1/FVC Ratio: 0.82</p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>Bronchitis (2022) - resolved</p>
+                    <p>Non-smoker</p>
+                `
+            },
+            heart: {
+                title: "Heart & Cardiovascular",
+                content: `
+                    <h3>ECG Report</h3>
+                    <p><strong>Date:</strong> February 26, 2025</p>
+                    <p><strong>Findings:</strong> Normal sinus rhythm at 72 BPM. Normal PR, QRS and QT intervals. No ST elevation or depression. T waves are of normal morphology.</p>
+                    <p><strong>Diagnosis:</strong> <span class="normal">Normal ECG</span></p>
+                    
+                    <h3>Echocardiogram</h3>
+                    <p>Left ventricular ejection fraction: 65%</p>
+                    <p>No valvular abnormalities detected</p>
+                    <p>Normal chamber dimensions</p>
+                    
+                    <h3>Blood Work</h3>
+                    <p>Total Cholesterol: 185 mg/dL</p>
+                    <p>LDL: 110 mg/dL</p>
+                    <p>HDL: 55 mg/dL</p>
+                    <p>Triglycerides: 120 mg/dL</p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>Family history of hypertension - Currently normotensive</p>
+                `
+            },
+            abdomen: {
+                title: "Abdomen & Digestive",
+                content: `
+                    <h3>Abdominal CT Scan</h3>
+                    <p><strong>Date:</strong> February 25, 2025</p>
+                    <p><strong>Findings:</strong> Liver, gallbladder, pancreas, spleen, and adrenal glands appear normal. No intra-abdominal fluid collections or masses identified. Bowel gas pattern is unremarkable.</p>
+                    <p><strong>Diagnosis:</strong> <span class="critical">Appendicitis - acute inflammation</span> of the appendix with potential for rupture. Surgical intervention recommended.</p>
+                    
+                    <h3>Lab Results</h3>
+                    <p>WBC: 14,500/µL (Elevated)</p>
+                    <p>CRP: 25 mg/L (Elevated)</p>
+                    <p>Liver Function Tests: Within normal limits</p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>Gastroesophageal reflux disease (GERD) - well controlled with medication</p>
+                    <p>No previous abdominal surgeries</p>
+                `
+            },
+            pelvis: {
+                title: "Pelvis & Reproductive",
+                content: `
+                    <h3>Pelvic Ultrasound</h3>
+                    <p><strong>Date:</strong> February 26, 2025</p>
+                    <p><strong>Findings:</strong> Normal pelvic anatomy. No masses or abnormalities detected. Urinary bladder appears normal.</p>
+                    <p><strong>Diagnosis:</strong> <span class="normal">Normal pelvic examination</span></p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>No significant pelvic or reproductive health issues</p>
+                `
+            },
+            rightArm: {
+                title: "Right Arm & Shoulder",
+                content: `
+                    <h3>Right Shoulder MRI</h3>
+                    <p><strong>Date:</strong> January 15, 2025</p>
+                    <p><strong>Findings:</strong> Mild tendinosis of the supraspinatus tendon without tear. No labral tear. Glenohumeral joint appears normal. No evidence of fracture or dislocation.</p>
+                    <p><strong>Diagnosis:</strong> <span class="warning">Mild rotator cuff tendinopathy</span></p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>Sports-related shoulder strain (2023) - resolved with physical therapy</p>
+                `
+            },
+            leftArm: {
+                title: "Left Arm & Shoulder",
+                content: `
+                    <h3>Left Arm X-Ray</h3>
+                    <p><strong>Date:</strong> February 27, 2025</p>
+                    <p><strong>Findings:</strong> No evidence of fracture or dislocation. Joint spaces are well maintained. No soft tissue abnormalities.</p>
+                    <p><strong>Diagnosis:</strong> <span class="normal">Normal left arm anatomy</span></p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>No significant issues with left arm</p>
+                `
+            },
+            rightLeg: {
+                title: "Right Leg & Knee",
+                content: `
+                    <h3>Right Knee MRI</h3>
+                    <p><strong>Date:</strong> December 10, 2024</p>
+                    <p><strong>Findings:</strong> Grade II sprain of the medial collateral ligament (MCL). No meniscal tear. Anterior and posterior cruciate ligaments are intact. No evidence of fracture or bone contusion.</p>
+                    <p><strong>Diagnosis:</strong> <span class="warning">MCL sprain</span> - improving with physical therapy</p>
+                    
+                    <h3>Treatment Plan</h3>
+                    <p>Continue physical therapy 2x weekly</p>
+                    <p>Avoid high-impact activities for 4 more weeks</p>
+                `
+            },
+            leftLeg: {
+                title: "Left Leg & Knee",
+                content: `
+                    <h3>Left Lower Extremity Doppler Ultrasound</h3>
+                    <p><strong>Date:</strong> February 25, 2025</p>
+                    <p><strong>Findings:</strong> Normal blood flow in the femoral, popliteal, and tibial vessels. No evidence of deep vein thrombosis.</p>
+                    <p><strong>Diagnosis:</strong> <span class="normal">Normal vascular study</span></p>
+                    
+                    <h3>Previous Medical History</h3>
+                    <p>Mild ankle sprain (2022) - fully recovered</p>
+                `
+            },
+            spine: {
+                title: "Spine & Vertebrae",
+                content: `
+                    <h3>Lumbar Spine MRI</h3>
+                    <p><strong>Date:</strong> January 30, 2025</p>
+                    <p><strong>Findings:</strong> Mild degenerative disc disease at L4-L5 with small disc bulge but no significant neural impingement. No spinal stenosis. No evidence of fracture or dislocation.</p>
+                    <p><strong>Diagnosis:</strong> <span class="warning">Early degenerative disc disease</span></p>
+                    
+                    <h3>Treatment Recommendations</h3>
+                    <p>Core strengthening exercises</p>
+                    <p>Proper ergonomics education</p>
+                    <p>Weight management</p>
+                `
+            }
+        };
+        
+        // Create patient body
+        const bodyParts = {};
+        
+        // Create torso
+        const torsoGeometry = new THREE.CylinderGeometry(0.8, 0.7, 2.2, 32);
+        const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xffdbac });
+        const torso = new THREE.Mesh(torsoGeometry, bodyMaterial);
+        torso.position.y = 0;
+        torso.rotation.x = Math.PI / 2;
+        torso.castShadow = true;
+        scene.add(torso);
+        torso.userData = { bodyPart: "abdomen" };
+        bodyParts.abdomen = torso;
+        
+        // Create head
+        const headGeometry = new THREE.SphereGeometry(0.4, 32, 32);
+        const head = new THREE.Mesh(headGeometry, bodyMaterial);
+        head.position.set(0, 0, -1.4);
+        head.castShadow = true;
+        scene.add(head);
+        head.userData = { bodyPart: "head" };
+        bodyParts.head = head;
+        
+        // Create arms
+        const armGeometry = new THREE.CylinderGeometry(0.15, 0.15, 1.2, 16);
+        
+        const rightArm = new THREE.Mesh(armGeometry, bodyMaterial);
+        rightArm.position.set(1.1, 0, -0.6);
+        rightArm.rotation.z = Math.PI / 2;
+        rightArm.rotation.y = -Math.PI / 6;
+        rightArm.castShadow = true;
+        scene.add(rightArm);
+        rightArm.userData = { bodyPart: "rightArm" };
+        bodyParts.rightArm = rightArm;
+        
+        const leftArm = new THREE.Mesh(armGeometry, bodyMaterial);
+        leftArm.position.set(-1.1, 0, -0.6);
+        leftArm.rotation.z = -Math.PI / 2;
+        leftArm.rotation.y = Math.PI / 6;
+        leftArm.castShadow = true;
+        scene.add(leftArm);
+        leftArm.userData = { bodyPart: "leftArm" };
+        bodyParts.leftArm = leftArm;
+        
+        // Create legs
+        const legGeometry = new THREE.CylinderGeometry(0.2, 0.15, 1.8, 16);
+        
+        const rightLeg = new THREE.Mesh(legGeometry, bodyMaterial);
+        rightLeg.position.set(0.4, 0, 1.3);
+        rightLeg.castShadow = true;
+        scene.add(rightLeg);
+        rightLeg.userData = { bodyPart: "rightLeg" };
+        bodyParts.rightLeg = rightLeg;
+        
+        const leftLeg = new THREE.Mesh(legGeometry, bodyMaterial);
+        leftLeg.position.set(-0.4, 0, 1.3);
+        leftLeg.castShadow = true;
+        scene.add(leftLeg);
+        leftLeg.userData = { bodyPart: "leftLeg" };
+        bodyParts.leftLeg = leftLeg;
+        
+        // Create heart (visible through chest)
+        const heartGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+        const heartMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000, transparent: true, opacity: 0.7 });
+        const heart = new THREE.Mesh(heartGeometry, heartMaterial);
+        heart.position.set(-0.2, 0.2, -0.5);
+        heart.scale.set(1, 1.2, 1);
+        scene.add(heart);
+        heart.userData = { bodyPart: "heart" };
+        bodyParts.heart = heart;
+        
+        // Create chest
+        const chestGeometry = new THREE.SphereGeometry(0.8, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const chest = new THREE.Mesh(chestGeometry, bodyMaterial);
+        chest.position.set(0, 0, -0.6);
+        chest.rotation.x = Math.PI;
+        chest.castShadow = true;
+        scene.add(chest);
+        chest.userData = { bodyPart: "chest" };
+        bodyParts.chest = chest;
+        
+        // Create pelvis
+        const pelvisGeometry = new THREE.SphereGeometry(0.7, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const pelvis = new THREE.Mesh(pelvisGeometry, bodyMaterial);
+        pelvis.position.set(0, 0, 0.6);
+        pelvis.rotation.x = 0;
+        pelvis.castShadow = true;
+        scene.add(pelvis);
+        pelvis.userData = { bodyPart: "pelvis" };
+        bodyParts.pelvis = pelvis;
+        
+        // Create spine
+        const spineGeometry = new THREE.BoxGeometry(0.2, 0.2, 2);
+        const spineMaterial = new THREE.MeshPhongMaterial({ color: 0xffffdd });
+        const spine = new THREE.Mesh(spineGeometry, spineMaterial);
+        spine.position.set(0, -0.3, 0);
+        spine.rotation.x = Math.PI / 2;
+        scene.add(spine);
+        spine.userData = { bodyPart: "spine" };
+        bodyParts.spine = spine;
+        
+        // Raycaster for mouse interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let highlightedPart = null;
+        
+        // Mouse move event for hover effect
+        document.addEventListener('mousemove', (event) => {
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Show tooltip at mouse position
+            const tooltip = document.getElementById('tooltip');
+            tooltip.style.left = (event.clientX + 15) + 'px';
+            tooltip.style.top = (event.clientY + 15) + 'px';
+            
+            // Reset any previously highlighted part
+            if (highlightedPart) {
+                if (highlightedPart.material.emissive) {
+                    highlightedPart.material.emissive.setHex(0x000000);
+                }
+                highlightedPart = null;
+                tooltip.style.display = 'none';
+            }
+        });
+        
+        // Click event to show medical report
+        document.addEventListener('click', (event) => {
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update the raycaster
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Calculate objects intersecting the ray
+            const intersects = raycaster.intersectObjects(scene.children);
+            
+            // If clicked on a body part
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                if (object.userData && object.userData.bodyPart) {
+                    const bodyPart = object.userData.bodyPart;
+                    
+                    // Display medical report
+                    const report = medicalReports[bodyPart];
+                    if (report) {
+                        const reportDiv = document.getElementById('medicalReport');
+                        document.getElementById('reportTitle').textContent = report.title;
+                        document.getElementById('reportContent').innerHTML = report.content;
+                        reportDiv.style.display = 'block';
+                        
+                        // Highlight the part
+                        if (object.material.emissive) {
+                            object.material.emissive.setHex(0x333333);
+                            highlightedPart = object;
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Orbit controls
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let rotationSpeed = 0.01;
+        let cameraDistance = 4;
+        let cameraHeight = 1.5;
+        
+        document.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = {
+                x: e.clientX,
+                y: e.clientY
+            };
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const deltaMove = {
+                x: e.clientX - previousMousePosition.x,
+                y: e.clientY - previousMousePosition.y
+            };
+            
+            const deltaRotationQuaternion = new THREE.Quaternion()
+                .setFromEuler(new THREE.Euler(
+                    deltaMove.y * rotationSpeed,
+                    deltaMove.x * rotationSpeed,
+                    0,
+                    'XYZ'
+                ));
+            
+            // Rotate the scene (opposite of camera rotation)
+            scene.rotation.y += deltaMove.x * rotationSpeed;
+            
+            // Limit vertical rotation to prevent flipping
+            const newXRotation = scene.rotation.x + deltaMove.y * rotationSpeed;
+            if (newXRotation < Math.PI / 3 && newXRotation > -Math.PI / 3) {
+                scene.rotation.x = newXRotation;
+            }
+            
+            previousMousePosition = {
+                x: e.clientX,
+                y: e.clientY
+            };
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        // Zoom with scroll
+        document.addEventListener('wheel', (e) => {
+            const zoomSpeed = 0.1;
+            cameraDistance += e.deltaY * 0.01;
+            
+            // Clamp zoom
+            cameraDistance = Math.max(2, Math.min(cameraDistance, 6));
+            
+            camera.position.z = cameraDistance;
+            camera.lookAt(0, 0, 0);
+        });
+        
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Update vitals with realistic variations
+        function updateVitals() {
+            // Normal values with small random variations
+            const heartRate = Math.floor(70 + Math.random() * 10);
+            const sysBP = Math.floor(115 + Math.random() * 10);
+            const diaBP = Math.floor(75 + Math.random() * 8);
+            const o2 = Math.floor(96 + Math.random() * 3);
+            const temp = (98.4 + Math.random() * 0.4).toFixed(1);
+            const resp = Math.floor(12 + Math.random() * 4);
+            
+            // Update DOM elements
+            document.getElementById('heartRate').textContent = `${heartRate} BPM`;
+            document.getElementById('bloodPressure').textContent = `${sysBP}/${diaBP} mmHg`;
+            document.getElementById('o2sat').textContent = `${o2}%`;
+            document.getElementById('temp').textContent = `${temp}°F`;
+            document.getElementById('respiration').textContent = `${resp}/min`;
+            
+            // Make heart pulse with heart rate
+            const scale = 1 + Math.sin(Date.now() * 0.008) * 0.05;
+            if (bodyParts.heart) {
+                bodyParts.heart.scale.set(scale, scale * 1.2, scale);
+            }
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update raycaster
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children);
+            
+            // Handle hover effect
+            const tooltip = document.getElementById('tooltip');
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                if (object.userData && object.userData.bodyPart) {
+                    const bodyPart = object.userData.bodyPart;
+                    
+                    // Show body part name on hover
+                    if (medicalReports[bodyPart]) {
+                        tooltip.textContent = medicalReports[bodyPart].title;
+                        tooltip.style.display = 'block';
+                        
+                        // Highlight the part on hover
+                        if (object.material.emissive && (!highlightedPart || highlightedPart !== object)) {
+                            object.material.emissive.setHex(0x222222);
+                            
+                            // Reset previous highlight if different object
+                            if (highlightedPart && highlightedPart !== object) {
+                                highlightedPart.material.emissive.setHex(0x000000);
+                            }
+                            
+                            highlightedPart = object;
+                        }
+                    }
+                } else {
+                    // Hide tooltip if not hovering over a body part
+                    tooltip.style.display = 'none';
+                    
+                    // Reset highlight
+                    if (highlightedPart) {
+                        highlightedPart.material.emissive.setHex(0x000000);
+                        highlightedPart = null;
+                    }
+                }
+            } else {
+                // Hide tooltip if not hovering over anything
+                tooltip.style.display = 'none';
+                
+                // Reset highlight
+                if (highlightedPart) {
+                    highlightedPart.material.emissive.setHex(0x000000);
+                    highlightedPart = null;
+                }
+            }
+            
+            // Render scene
+            renderer.render(scene, camera);
+        }
+        
+        // Start animation and vital sign updates
+        animate();
+        setInterval(updateVitals, 1000);
+    </script>
+</body>
+</html>
